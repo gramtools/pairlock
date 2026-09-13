@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0c1622" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Pairlock" />
+  <meta name="description" content="Локальное шифрование текста. Сервера нет. Ключи не покидают устройство." />
+  <title>Pairlock — локальное шифрование</title>
+  <link rel="manifest" href="site.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon128.png" />
+  <link rel="icon" href="icons/icon48.png" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="page">
+  <div class="wrap" id="app">
+    <div style="padding:28px 18px">
+      <div class="logo" style="margin-bottom:14px"></div>
+      <h2 style="margin-left:0">Pairlock</h2>
+      <p class="lead" style="margin-left:0">Загрузка… Если экран пустой — откройте страницу по https:// или включите JavaScript.</p>
+    </div>
+  </div>
+  <noscript><p style="padding:20px;color:#fff;background:#081018">Pairlock нужен JavaScript.</p></noscript>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/qrcode.min.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/protocol.js"></script>
+  <script src="js/vault.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

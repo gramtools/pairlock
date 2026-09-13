@@ -1,0 +1,11 @@
+{
+  "name": "pairlock",
+  "private": true,
+  "license": "MIT",
+  "description": "Local end-to-end text encryption for VK, MAX, and any chat. No server.",
+  "scripts": {
+    "test": "node scripts/test-protocol.mjs && node scripts/test-vault.mjs",
+    "build": "node scripts/build-standalone.mjs",
+    "pack": "node scripts/pack-extension.mjs"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Pairlock",
+  "version": "1.9.15",
+  "description": "Локальное шифрование текста в VK и MAX. Сервера нет. Ключи только на устройстве.",
+  "permissions": ["storage", "activeTab", "alarms"],
+  "host_permissions": [
+    "https://vk.ru/*",
+    "https://*.vk.ru/*",
+    "https://vk.com/*",
+    "https://*.vk.com/*",
+    "https://vk.me/*",
+    "https://*.vk.me/*",
+    "https://web.max.ru/*",
+    "https://*.max.ru/*",
+    "https://api.vk.ru/*",
+    "https://api.vk.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pairlock",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://vk.ru/*",
+        "https://*.vk.ru/*",
+        "https://vk.com/*",
+        "https://*.vk.com/*",
+        "https://vk.me/*",
+        "https://*.vk.me/*",
+        "https://web.max.ru/*",
+        "https://*.max.ru/*"
+      ],
+      "js": ["inject/hook.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://vk.ru/*",
+        "https://*.vk.ru/*",
+        "https://vk.com/*",
+        "https://*.vk.com/*",
+        "https://vk.me/*",
+        "https://*.vk.me/*",
+        "https://web.max.ru/*",
+        "https://*.max.ru/*"
+      ],
+      "js": ["content/content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

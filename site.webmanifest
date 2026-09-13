@@ -1,0 +1,15 @@
+{
+  "name": "Pairlock",
+  "short_name": "Pairlock",
+  "description": "Open-source local end-to-end encryption pad for VK, MAX and any chat.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#081018",
+  "theme_color": "#0c1622",
+  "lang": "ru",
+  "icons": [
+    { "src": "icons/icon48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "icons/icon128.png", "sizes": "128x128", "type": "image/png" }
+  ]
+}
