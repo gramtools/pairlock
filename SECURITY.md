@@ -45,7 +45,7 @@ Pairlock — локальный клиент. Своего сервера, ак�
 - Формат `S256VAULT2`: PBKDF2-SHA256, число итераций в блобе (сейчас 600 000). Старые `S256VAULT1` (250 000) открываются и переупаковываются
 - Пароль **не сохраняется**. Пока открыто, в памяти только выведенный ключ
 - Смена identity (вкладка «Ключи», три предупреждения + фраза + пароль) меняет долгосрочный ключ и стирает контакты
-- Срок пары (по желанию): `S256KT1.` — 15 мин / час / сутки / неделя. Сгорает сессия и локальная история **этого** контакта
+- Срок пары (по желанию): `S256KT1.` — 15 мин / 30 мин / час / сутки / неделя. Сгорает сессия и локальная история **этого** контакта
 - Исходящие с провода чужим секретом не восстанавливаются — эфемер после отправки забыт. Локальная копия лежит в сейфе
 
 ## Расширение
@@ -102,7 +102,7 @@ Compare fingerprints by voice / in person. Checking them only inside the same ch
 - `S256VAULT2`: PBKDF2-SHA256, iteration count stored in the blob (currently 600,000). Legacy `S256VAULT1` (250,000) is read and re-wrapped
 - The password is **never persisted**. While unlocked, only the derived key is kept
 - Rotate identity (Keys tab, three warnings + typed phrase + password) replaces the long-term key and wipes contacts
-- Optional timed pair: `S256KT1.` — 15m / 1h / 1d / 1w. Burns that contact’s session and local history only
+- Optional timed pair: `S256KT1.` — 15m / 30m / 1h / 1d / 1w. Burns that contact’s session and local history only
 - Sent packets cannot be recovered from the wire with the peer’s secret — the ephemeral is discarded. A local copy sits in the vault
 
 ## Extension
