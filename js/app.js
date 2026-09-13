@@ -192,6 +192,13 @@
       pairSafeHint: "Только для этой пары: через срок сессия и история чата сотрутся. Другие контакты не трогаем.",
       pairSafeWarn: "Выберите срок до обмена ключами. Оба должны совпасть. По истечении стирается только этот чат — не всё хранилище. Скрин до срока всё ещё риск.",
       pairOfferHint: "Действует на ваш QR и новые пары. Уже созданные контакты не меняются — у каждого свой срок.",
+      burnChatTitle: "Сгорающая переписка",
+      burnChatHint: "На пару создаётся свой сессионный ключ. Каждое сообщение после прочтения живёт 30 с / 1 мин / 2 мин — потом Pairlock его больше не откроет. Чат может идти сутками, сгорают отдельные фразы. Скрин до таймера — риск.",
+      burnChatOff: "Выкл",
+      burnChat30: "30 с",
+      burnChat60: "1 мин",
+      burnChat120: "2 мин",
+      burnChatOn: "сгорает",
       pairForever: "Бессрочно",
       pairForeverHint: "Ключи с этим человеком живут, пока не сотрёте сами.",
       pairBurnLeft: "Сжигание хранилища через",
@@ -473,6 +480,13 @@
       pairSafeHint: "For this pair only: when time is up the session and chat history are wiped. Other contacts stay.",
       pairSafeWarn: "Pick a lifetime before exchanging keys. Both sides must match. Only that chat is wiped — not the whole vault. Screenshots before the deadline are still a risk.",
       pairOfferHint: "Applies to your QR and new pairs. Existing contacts keep their own lifetime.",
+      burnChatTitle: "Disappearing thread",
+      burnChatHint: "The pair gets its own session key. After you read a message it lives 30s / 1m / 2m — then Pairlock cannot open it again. The chat can run for days; only the phrases burn. A screenshot before the timer is still a risk.",
+      burnChatOff: "Off",
+      burnChat30: "30s",
+      burnChat60: "1 min",
+      burnChat120: "2 min",
+      burnChatOn: "burns",
       pairForever: "Forever",
       pairForeverHint: "Keys with this person live until you wipe them.",
       pairBurnLeft: "Whole vault burns in",
@@ -1576,6 +1590,7 @@
       } else {
         const pairView = V().pairModeView ? V().pairModeView() : { mode: "forever", locked: false, keyTtlSec: 0 };
         const offerTtl = pairView.keyTtlSec || 0;
+        const offerBurn = pairView.keyBurnTtlSec || 0;
         const vaultBurnLeft =
           settings.burnAt && settings.burnAt > Date.now()
             ? `<div class="keys-burn">${esc(t("pairBurnLeft"))} <b>${esc(fmtBurnLeft(settings.burnAt))}</b></div>`
@@ -1590,6 +1605,17 @@
           .map(
             ([sec, key]) =>
               `<button type="button" class="ttl-chip ${offerTtl === sec ? "on" : ""}" data-offer-ttl="${sec}">${esc(t(key))}</button>`
+          )
+          .join("");
+        const burnChips = [
+          [0, "burnChatOff"],
+          [30, "burnChat30"],
+          [60, "burnChat60"],
+          [120, "burnChat120"],
+        ]
+          .map(
+            ([sec, key]) =>
+              `<button type="button" class="ttl-chip ${offerBurn === sec ? "on" : ""}" data-offer-burn="${sec}">${esc(t(key))}</button>`
           )
           .join("");
         body = `
@@ -1619,6 +1645,9 @@
             <div class="keys-label">${esc(t("pairModeTitle"))}</div>
             <div class="ttl-row">${ttlChips}</div>
             <p class="note">${esc(t("pairOfferHint"))}</p>
+            <div class="keys-label" style="margin-top:14px">${esc(t("burnChatTitle"))}</div>
+            <div class="ttl-row">${burnChips}</div>
+            <p class="note">${esc(t("burnChatHint"))}</p>
             ${
               offerTtl > 0
                 ? `<div class="callout warn keys-safe-warn">${esc(t("pairSafeWarn"))}</div>`
@@ -2096,6 +2125,24 @@
     if (modeSafe) modeSafe.onclick = null;
     const modeForever = document.getElementById("mode-forever");
     if (modeForever) modeForever.onclick = null;
+    app.querySelectorAll("[data-offer-burn]").forEach((el) => {
+      el.onclick = async () => {
+        const ttl = Number(el.dataset.offerBurn);
+        try {
+          if (isExt && chrome.runtime && chrome.runtime.id) {
+            const r = await chrome.runtime.sendMessage({ type: "S256_SET_BURN_TTL", ttlSec: ttl });
+            if (!r || !r.ok) throw new Error((r && r.error) || "error");
+            await V().restoreSession();
+          } else {
+            await V().setSetting("keyBurnTtlSec", ttl);
+          }
+          setNotice(ttl > 0 ? t("burnChatTitle") + ": " + el.textContent : t("burnChatOff"), "ok");
+        } catch (e) {
+          setNotice(e.message, "err");
+        }
+        await render();
+      };
+    });
     app.querySelectorAll("[data-offer-ttl]").forEach((el) => {
       el.onclick = async () => {
         const ttl = Number(el.dataset.offerTtl);

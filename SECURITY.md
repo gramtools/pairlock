@@ -46,6 +46,7 @@ Pairlock — локальный клиент. Своего сервера, ак�
 - Пароль **не сохраняется**. Пока открыто, в памяти только выведенный ключ
 - Смена identity (вкладка «Ключи», три предупреждения + фраза + пароль) меняет долгосрочный ключ и стирает контакты
 - Срок пары (по желанию): `S256KT1.` — 15 мин / 30 мин / час / сутки / неделя. Сгорает сессия и локальная история **этого** контакта
+- Сгорающая переписка: `S256KB1.` — у пары свой session + hash ratchet. После прочтения текст живёт 30 / 60 / 120 с, затем ключ сообщения удаляется. Identity этого пакета больше не открывает. Неоткрытое сгорает через 7 дней. Скрин и нечестный клиент — вне модели
 - Исходящие с провода чужим секретом не восстанавливаются — эфемер после отправки забыт. Локальная копия лежит в сейфе
 
 ## Расширение
@@ -103,6 +104,7 @@ Compare fingerprints by voice / in person. Checking them only inside the same ch
 - The password is **never persisted**. While unlocked, only the derived key is kept
 - Rotate identity (Keys tab, three warnings + typed phrase + password) replaces the long-term key and wipes contacts
 - Optional timed pair: `S256KT1.` — 15m / 30m / 1h / 1d / 1w. Burns that contact’s session and local history only
+- Disappearing thread: `S256KB1.` — pair session + hash ratchet. After first read, plaintext lives 30 / 60 / 120 s, then the message key is deleted. Identity alone cannot reopen the packet. Unopened slots burn after 7 days. Screenshots and a cheating client are out of scope
 - Sent packets cannot be recovered from the wire with the peer’s secret — the ephemeral is discarded. A local copy sits in the vault
 
 ## Extension

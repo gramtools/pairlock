@@ -1,20 +1,35 @@
-# Pairlock
+<p align="center">
+  <img src="icons/pairlock-logo.png" width="96" alt="Pairlock">
+</p>
 
-[Русский](#русский) · [English](#english)
+<h1 align="center">Pairlock</h1>
 
-Локальное шифрование текста для VK, MAX и любого другого чата. **Сервера нет.** Ключи не покидают устройство. Мессенджер видит только шифр.
+<p align="center">
+  <strong>Расширение для браузера.</strong> Пишете в VK и MAX как обычно — на сервер уходит шифр, не фраза.<br>
+  Своего сервера нет. Ключи живут только на вашем компьютере.
+</p>
 
-MIT · открытый исходный код · [схема](#как-устроено-шифрование) · [SECURITY.md](./SECURITY.md)
+<p align="center">
+  <a href="#установка">Поставить за минуту</a> ·
+  <a href="#русский">Русский</a> ·
+  <a href="#english">English</a> ·
+  <a href="#как-устроено-шифрование">Схема</a> ·
+  <a href="./SECURITY.md">SECURITY.md</a> ·
+  MIT
+</p>
 
 ---
 
 # Русский
 
-Pairlock — клиент на вашем устройстве, не мессенджер и не облако. Текст закрывается **AES-256-GCM**, обмен секретом — **X25519**, на каждое сообщение свой эфемерный ключ. SHA-256 здесь только внутри HKDF, это не «шифр SHA-256».
+Открыли веб-VK или веб-MAX — внизу плашка Pairlock. Обменялись публичными ключами (это не пароль), сверили отпечаток голосом, пишете в **своём** зелёном поле. Собеседник без расширения видит кашу. Тот, у кого есть пара, читает обычный текст.
 
-Своего бэкенда, аккаунта и телеметрии нет. Popup и страница ставят CSP `connect-src 'none'` — клиент сам никуда не ходит. По сети мессенджера уходит уже готовый пакет.
+- **Расширение Chrome / Edge / Яндекс / Brave** — не новый мессенджер, а слой поверх тех, которыми уже пользуетесь
+- **Своё окно чата** — набор не попадает в поле «Напишите сообщение», черновики и логи сайта эту фразу не видят
+- **Нет облака Pairlock** — некуда слить ключ. Клиент сам никуда не ходит (`connect-src 'none'`)
+- Даже если выгрузить всю историю и оба публичных ключа — **текста нет**. Нужен секрет с устройства
 
-Официального аудита лаборатории не было. Код открыт: [`js/protocol.js`](./js/protocol.js), [`js/crypto.js`](./js/crypto.js), [`js/vault.js`](./js/vault.js).
+Шифр: **AES-256-GCM**, обмен секретом: **X25519**, на каждое сообщение новый эфемер. SHA-256 только внутри HKDF — это не «шифр SHA-256». Официального аудита лаборатории не было; код открыт: [`js/protocol.js`](./js/protocol.js), [`js/crypto.js`](./js/crypto.js), [`js/vault.js`](./js/vault.js).
 
 ## Установка
 
@@ -109,6 +124,16 @@ HKDF-SHA256( ECDH(эфемер, ключ_друга)  ‖  ECDH(мой_секр�
 
 Смена бессрочного identity (красная кнопка на вкладке «Ключи») — другое: сгорают все контакты на этом устройстве, отпечаток новый. Это не смена срока.
 
+## Сгорающая переписка
+
+Отдельный режим на **всю пару**, не на одно сообщение. Чат может идти сутками. В окне сопряжения на VK/MAX (шаг «Ключ в чат») два ряда чипов: срок пары и **сгорание сообщений** — выкл / 30 с / 1 мин / 2 мин. То же на вкладке **Ключи**. В обмен уходит `S256KB1.…` — у пары свой сессионный ключ.
+
+Кто пишет первым — выбирает условия и шлёт ключ. Второй видит их в чипах: может **принять** и ответить таким же ключом или **выбрать своё** и предложить другие. Пара создаётся по ключу, который вы добавляете.
+
+После **первого прочтения** на этом устройстве фраза живёт заданное окно. Потом ключ сообщения стирается (hash ratchet): даже этот Pairlock тот пакет больше не откроет. На сайте VK/MAX остаётся каша. В окне Pairlock — «● сгорело».
+
+Не открыли за 7 дней — слот сгорает неоткрытым. Скрин до таймера по-прежнему риск. Форк, который не стирает цепочку, может сжульничать — как у любого disappearing chat. Честный клиент и выгрузка истории мессенджера пропавшую фразу не соберут.
+
 ## Почему публичные ключи можно слать открыто
 
 Публичный ключ X25519 — это точка на кривой: `A = a·G`. По `A` восстановить `a` — задача дискретного логарифма. Для Curve25519 практического способа нет.
@@ -161,13 +186,14 @@ node scripts/pack-extension.mjs      # zip для Chrome Web Store
 
 # English
 
-Pairlock is a **local** encryption pad for VK, MAX, and any other chat. **No server.** Keys never leave the device. The messenger only sees ciphertext.
+Open web VK or web MAX — the Pairlock bar sits at the bottom. Exchange public keys (not a password), match the fingerprint by voice, type in **your** green field. A friend without the extension sees a blob. The person in the pair reads a sentence.
 
-Text is sealed with **AES-256-GCM**. Key agreement is **X25519**. Each message gets a fresh ephemeral key. SHA-256 is used inside HKDF — this is not a “SHA-256 cipher”.
+- **Chrome / Edge / Yandex / Brave extension** — not a new messenger, a layer on the ones you already use
+- **Own chat window** — keystrokes never land in “Write a message”; site drafts and admin logs do not see the phrase
+- **No Pairlock cloud** — nowhere to leak a key. The client does not phone home (`connect-src 'none'`)
+- A full history dump plus both public keys still **is not the text**. That takes a secret from the device
 
-There is no backend, account, or telemetry. The popup and the standalone page ship CSP with `connect-src 'none'`. The client does not phone home.
-
-No laboratory audit. The source is public: [`js/protocol.js`](./js/protocol.js), [`js/crypto.js`](./js/crypto.js), [`js/vault.js`](./js/vault.js). Threat model: [SECURITY.md](./SECURITY.md).
+Crypto: **AES-256-GCM**, key agreement: **X25519**, a fresh ephemeral per message. SHA-256 is only inside HKDF — this is not a “SHA-256 cipher”. No laboratory audit. Source: [`js/protocol.js`](./js/protocol.js), [`js/crypto.js`](./js/crypto.js), [`js/vault.js`](./js/vault.js). Threat model: [SECURITY.md](./SECURITY.md).
 
 ## Install
 
@@ -259,6 +285,16 @@ Keys are forever by default: `S256K1.…`. On the **Keys** tab you can set a lif
 - a screenshot taken before expiry still exists; this does not wipe the message from VK’s server.
 
 Rotating the long-term identity (red button on Keys) is different: every contact on this device is wiped and the fingerprint changes. That is not a TTL change.
+
+## Disappearing thread
+
+A mode for the **whole pair**, not a one-off message. The chat can run for days. In the VK/MAX pairing sheet (“Key into chat”) there are two chip rows: pair lifetime and **message burn** — off / 30s / 1 min / 2 min. Same controls on the **Keys** tab. The exchange carries `S256KB1.…` — the pair gets its own session key.
+
+Whoever sends first picks the terms. The other side sees them on the chips: **accept** and reply with a matching key, or **pick your own** and propose different terms. The pair is created from the key you add.
+
+After the **first read** on this device the sentence lives for that window. Then the message key is deleted (hash ratchet): even this Pairlock cannot open that packet again. VK/MAX keep a blob. The Pairlock window shows “● сгорело”.
+
+Unopened for 7 days — the slot burns unread. A screenshot before the timer still exists. A fork that refuses to delete the chain can cheat, as with any disappearing chat. An honest client and a messenger history dump cannot recover a burned phrase.
 
 ## Why public keys are safe to exchange
 

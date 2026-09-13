@@ -17,7 +17,7 @@
 
   function isKeyPacket(s) {
     const t = String(s || "").trim();
-    return t.startsWith("S256K1.") || t.startsWith("S256KT1.");
+    return t.startsWith("S256K1.") || t.startsWith("S256KT1.") || t.startsWith("S256KB1.");
   }
 
   function isCipherPacket(s) {
@@ -31,7 +31,7 @@
 
   function hasCipherMarker(s) {
     const t = String(s || "");
-    if (t.indexOf(PREFIX) !== -1 || t.indexOf("S256K1.") !== -1 || t.indexOf("S256KT1.") !== -1) return true;
+    if (t.indexOf(PREFIX) !== -1 || t.indexOf("S256K1.") !== -1 || t.indexOf("S256KT1.") !== -1 || t.indexOf("S256KB1.") !== -1) return true;
     return /(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{120,}(?:[^A-Za-z0-9_-]|$)/.test(t);
   }
 

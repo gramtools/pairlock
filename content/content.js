@@ -5,7 +5,7 @@
 
   function isKeyPacket(s) {
     const t = String(s || "").trim();
-    return t.startsWith("S256K1.") || t.startsWith("S256KT1.");
+    return t.startsWith("S256K1.") || t.startsWith("S256KT1.") || t.startsWith("S256KB1.");
   }
 
   /* Classic S256M1. or stealth base64 blob (no brand prefix). Loose length check —
@@ -57,6 +57,9 @@
     if (n === 3600) return "1 час";
     if (n === 86400) return "сутки";
     if (n === 604800) return "неделя";
+    if (n === 30) return "30 секунд";
+    if (n === 60) return "1 минута";
+    if (n === 120) return "2 минуты";
     return n + " с";
   }
 
@@ -64,6 +67,10 @@
     const tokens = extractKeyTokensFromText(text);
     const t = tokens[0] || "";
     if (!t) return null;
+    if (t.startsWith("S256KB1.")) {
+      const p = t.split(".");
+      return { timed: Number(p[4]) > 0, burn: true, burnTtlSec: Number(p[3]) || 0, ttlSec: Number(p[4]) || 0, token: t };
+    }
     if (t.startsWith("S256KT1.")) {
       const p = t.split(".");
       return { timed: true, ttlSec: Number(p[3]) || 0, token: t };
@@ -367,7 +374,9 @@
   let rekeyChips;
   let rekeySend;
   let rekeyTtl = 0;
+  let rekeyBurn = 0;
   let rekeyPeer = "";
+  let adoptedPeerToken = "";
   let watchedPeer = "";
   let offerMode = "hide"; /* hide | new | keyfound */
   let dismissed = new Set();
@@ -495,7 +504,7 @@
 
   function keyIdentity(token) {
     const p = String(token || "").split(".");
-    if ((p[0] === "S256K1" || p[0] === "S256KT1") && p[1]) return p[1];
+    if ((p[0] === "S256K1" || p[0] === "S256KT1" || p[0] === "S256KB1") && p[1]) return p[1];
     return "";
   }
 
@@ -617,6 +626,7 @@
 
   function keyIssuedMs(token) {
     const p = String(token || "").split(".");
+    if (p[0] === "S256KB1" && p[5]) return readUnixMs(p[5]);
     if (p[0] !== "S256KT1" || !p[4]) return 0;
     return readUnixMs(p[4]);
   }
@@ -630,7 +640,7 @@
     const compact = raw.replace(/\s+/g, "");
     if (raw.indexOf("S256K") === -1 && compact.indexOf("S256K") === -1) return [];
     const re =
-      /S256KT1\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}\.(?:900|1800|3600|86400|604800)\.\d{10}|S256K1\.[A-Za-z0-9_-]{43}/g;
+      /S256KB1\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}\.(?:30|60|120)\.(?:0|900|1800|3600|86400|604800)\.\d{10}|S256KT1\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}\.(?:900|1800|3600|86400|604800)\.\d{10}|S256K1\.[A-Za-z0-9_-]{43}/g;
     const out = [];
     function pull(s) {
       re.lastIndex = 0;
@@ -918,24 +928,21 @@
   }
 
   function pairTermsAction(preview) {
-    const mine = (lastStatus.keyTtlSec || 0) >>> 0;
-    if (!preview) return { label: "Создать пару", adopt: false, peerTtl: 0 };
-    const peer = preview.timed ? preview.ttlSec >>> 0 : 0;
-    if (preview.timed && mine !== peer) {
-      return {
-        label: "Принять " + ttlPhrase(peer) + " и создать пару",
-        adopt: true,
-        peerTtl: peer,
-      };
-    }
-    if (!preview.timed && mine > 0) {
-      return {
-        label: "Принять бессрочно и создать пару",
-        adopt: true,
-        peerTtl: 0,
-      };
-    }
-    return { label: "Создать пару", adopt: false, peerTtl: peer };
+    const mineTtl = (lastStatus.keyTtlSec || 0) >>> 0;
+    const mineBurn = (lastStatus.keyBurnTtlSec || 0) >>> 0;
+    if (!preview) return { label: "Создать пару", adopt: false, peerTtl: 0, peerBurn: 0 };
+    const peerTtl = preview.timed ? preview.ttlSec >>> 0 : 0;
+    const peerBurn = preview.burn ? preview.burnTtlSec >>> 0 : 0;
+    const bits = [];
+    if (peerBurn) bits.push("сгорает " + ttlPhrase(peerBurn));
+    bits.push(peerTtl ? "ключи " + ttlPhrase(peerTtl) : "бессрочно");
+    const differ = peerTtl !== mineTtl || peerBurn !== mineBurn;
+    return {
+      label: differ ? "Принять: " + bits.join(", ") : "Создать пару",
+      adopt: differ,
+      peerTtl,
+      peerBurn,
+    };
   }
 
   function refreshPairGoButton() {
@@ -1087,7 +1094,7 @@
         setOfferStage("send");
         offerTitle.textContent = "Ключ в чат с «" + who + "»";
         offerDesc.textContent =
-          "Выберите срок и отправьте ключ в эту ленту. Это не пароль: им нельзя читать старые сообщения. Друг должен сделать то же в этом же чате.";
+          "Выберите срок ключей и сгорание сообщений, затем отправьте ключ в эту ленту. Это не пароль. Друг примет ваши условия или пришлёт свои.";
         offerAdd.style.display = "none";
       }
       if (okeyWrap && offerMode !== "keyfound") okeyWrap.style.display = "none";
@@ -1098,9 +1105,11 @@
 
   function applyRekey() {
     const chips = rekeyChips || (shadowRoot && shadowRoot.getElementById("rchips"));
+    const burnChips = shadowRoot && shadowRoot.getElementById("bchips");
     const sendBtn = rekeySend || (shadowRoot && shadowRoot.getElementById("rsend"));
     const note = rekeyDesc || (shadowRoot && shadowRoot.getElementById("rd"));
     const lab = shadowRoot && shadowRoot.getElementById("rlab");
+    const blab = shadowRoot && shadowRoot.getElementById("blab");
     const go = shadowRoot && shadowRoot.getElementById("oaddgo");
     rekeyChips = chips;
     rekeySend = sendBtn;
@@ -1108,9 +1117,12 @@
     if (!chips) return;
     const offerOn = !!(offerEl && offerEl.style.display !== "none");
     const stage = (offerEl && offerEl.dataset.stage) || "";
-    const pickTtl = offerOn && (stage === "send" || stage === "wait" || stage === "expired");
-    chips.style.display = pickTtl ? "flex" : "none";
-    if (lab) lab.style.display = pickTtl ? "" : "none";
+    const pickTtl = offerOn && (stage === "send" || stage === "wait" || stage === "expired" || stage === "keyfound");
+    const showChips = pickTtl && stage !== "needchat";
+    chips.style.display = showChips ? "flex" : "none";
+    if (burnChips) burnChips.style.display = showChips ? "flex" : "none";
+    if (lab) lab.style.display = showChips ? "" : "none";
+    if (blab) blab.style.display = showChips ? "" : "none";
     if (note) note.style.display = offerOn ? "" : "none";
     if (!offerOn) {
       if (sendBtn) sendBtn.style.display = "none";
@@ -1118,7 +1130,9 @@
     }
     if (stage === "needchat") {
       chips.style.display = "none";
+      if (burnChips) burnChips.style.display = "none";
       if (lab) lab.style.display = "none";
+      if (blab) blab.style.display = "none";
       if (note) note.style.display = "none";
       if (sendBtn) sendBtn.style.display = "none";
       return;
@@ -1128,52 +1142,76 @@
     const preview = parseKeyPreview(foundKey || (keyEl && keyEl.value) || "");
     if (pk !== rekeyPeer) {
       rekeyPeer = pk;
+      adoptedPeerToken = "";
       rekeyTtl = (lastStatus.keyTtlSec || 0) >>> 0;
+      rekeyBurn = (lastStatus.keyBurnTtlSec || 0) >>> 0;
     }
-    if (offerMode === "keyfound" && preview) {
+    if (offerMode === "keyfound" && preview && preview.token !== adoptedPeerToken) {
+      adoptedPeerToken = preview.token;
       rekeyTtl = preview.timed ? preview.ttlSec >>> 0 : 0;
+      rekeyBurn = preview.burn ? preview.burnTtlSec >>> 0 : 0;
     }
-    const opts = [
+    const ttlOpts = [
       [0, "бессрочно"],
       [900, "15 мин"],
       [3600, "1 час"],
       [86400, "сутки"],
       [604800, "неделя"],
     ];
-    if (pickTtl) {
-      chips.innerHTML = "";
+    const burnOpts = [
+      [0, "не сгорает"],
+      [30, "30 с"],
+      [60, "1 мин"],
+      [120, "2 мин"],
+    ];
+    function fillChips(box, opts, current, setVal) {
+      if (!box || !showChips) return;
+      box.innerHTML = "";
       for (const [sec, label] of opts) {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "rchip" + (rekeyTtl === sec ? " on" : "");
+        b.className = "rchip" + (current === sec ? " on" : "");
         b.textContent = label;
         b.addEventListener("click", (e) => {
           e.stopPropagation();
-          rekeyTtl = sec;
+          setVal(sec);
           applyRekey();
         });
-        chips.appendChild(b);
+        box.appendChild(b);
       }
     }
-    const his = preview ? (preview.timed ? ttlPhrase(preview.ttlSec) : "бессрочно") : "";
+    fillChips(chips, ttlOpts, rekeyTtl, (sec) => {
+      rekeyTtl = sec;
+    });
+    fillChips(burnChips, burnOpts, rekeyBurn, (sec) => {
+      rekeyBurn = sec;
+    });
+    const hisTtl = preview ? (preview.timed ? ttlPhrase(preview.ttlSec) : "бессрочно") : "";
+    const hisBurn = preview && preview.burn ? ttlPhrase(preview.burnTtlSec) : "не сгорает";
+    const his = preview ? hisTtl + ", " + hisBurn : "";
+    const sameAsHim =
+      !!preview &&
+      rekeyTtl === (preview.timed ? preview.ttlSec >>> 0 : 0) &&
+      rekeyBurn === (preview.burn ? preview.burnTtlSec >>> 0 : 0);
     const mineInChat = myKeyFresh(pk);
     if (offerMode === "keyfound" && preview) {
       if (!mineInChat) {
         if (sendBtn) {
           sendBtn.style.display = "block";
           sendBtn.className = "primary";
-          sendBtn.textContent = "Отправить мой ключ";
+          sendBtn.textContent = sameAsHim ? "Принять его условия и отправить ключ" : "Отправить свои условия";
         }
         if (note)
-          note.textContent =
-            "Вашего ключа в чате нет. Отправьте свой — срок возьмём как у него («" + his + "»). Потом создайте пару.";
+          note.textContent = sameAsHim
+            ? "Он предлагает: " + his + ". Чипы уже стоят как у него. Можно принять или выбрать своё и отправить другой ключ."
+            : "Вы предлагаете другие условия. Отправьте свой ключ — он увидит их и сможет принять.";
         if (go) {
           go.style.display = "none";
           go.className = "ghost-go";
         }
       } else {
         if (sendBtn) sendBtn.style.display = "none";
-        if (note) note.textContent = "Срок пары: «" + his + "». Проверьте имя и нажмите «Создать пару».";
+        if (note) note.textContent = "В чате оба ключа. Пара возьмёт условия из его ключа: " + his + ".";
         if (go) {
           go.style.display = "";
           go.className = "";
@@ -1187,12 +1225,14 @@
         go.className = "";
       }
       if (note)
-        note.textContent = "Срок выбирается здесь, на шаге 1. Если у друга другой — на шаге 3 примем его.";
+        note.textContent =
+          "Срок — как долго живёт пара. Сгорание — сколько фраза читается после открытия (30 с / 1 мин / 2 мин). Если у друга другие условия — на шаге 3 примете или ответите своими.";
     }
   }
 
-  async function sendRekey() {
+  async function applyOfferTerms() {
     const ttl = rekeyTtl >>> 0;
+    const burn = rekeyBurn >>> 0;
     const r = await send({
       type: "S256_SET_PAIR_MODE",
       mode: ttl > 0 ? "safe" : "forever",
@@ -1200,9 +1240,20 @@
     });
     if (!r || !r.ok) {
       paint((r && r.error) || "не удалось выставить срок", false);
-      return;
+      return false;
+    }
+    const b = await send({ type: "S256_SET_BURN_TTL", ttlSec: burn });
+    if (!b || !b.ok) {
+      paint((b && b.error) || "не удалось выставить сгорание", false);
+      return false;
     }
     lastStatus.keyTtlSec = ttl;
+    lastStatus.keyBurnTtlSec = burn;
+    return true;
+  }
+
+  async function sendRekey() {
+    if (!(await applyOfferTerms())) return;
     await sendMyKey();
   }
 
@@ -1783,7 +1834,9 @@
     const t = got.thread;
     const c = t.contact;
     ttl.textContent = c.name + (c.verified ? " ✓" : "");
-    sub.textContent = c.fingerprint || "";
+    sub.textContent =
+      (c.fingerprint || "") +
+      (t.session && t.session.burnTtlSec ? " · сгорает " + ttlPhrase(t.session.burnTtlSec) : "");
     ava.textContent = initials(c.name);
     ttl.style.cursor = "pointer";
     ttl.title = "Нажмите, чтобы переименовать";
@@ -1905,10 +1958,11 @@
         el.className = "msg " + (m.outgoing ? "out" : "in");
         const mb = document.createElement("div");
         mb.className = "mb";
-        mb.textContent = m.text || "";
+        mb.textContent = m.burned ? "● сгорело" : m.text || "";
         const stm = document.createElement("div");
         stm.className = "st";
-        stm.textContent = fmtTime(m.ts);
+        const left = m.burnAt && !m.burned ? Math.max(0, Math.ceil((m.burnAt - Date.now()) / 1000)) : 0;
+        stm.textContent = fmtTime(m.ts) + (left ? " · сгорит через " + left + " с" : "");
         el.appendChild(mb);
         el.appendChild(stm);
         msgs.appendChild(el);
@@ -2171,8 +2225,10 @@
           </div>
           <div class="olist" id="olist"></div>
           <div class="od" id="od">Сначала откройте личный чат с человеком.</div>
-          <div class="olab" id="rlab">Срок ключа — шаг 1</div>
+          <div class="olab" id="rlab">Срок пары</div>
           <div class="rchips" id="rchips"></div>
+          <div class="olab" id="blab">Сгорание сообщений</div>
+          <div class="rchips" id="bchips"></div>
           <div class="od" id="rd"></div>
           <div class="ob" id="ob">
             <button id="sendkey" class="primary">Отправить ключ в этот чат</button>
@@ -2186,7 +2242,7 @@
             <div id="okeyhint"></div>
             <div id="okeywrap" style="display:none">
               <span class="olab">Его ключ</span>
-              <textarea id="okey" placeholder="S256K1.… или S256KT1.…"></textarea>
+              <textarea id="okey" placeholder="S256K1.… / S256KT1.… / S256KB1.…"></textarea>
             </div>
             <button class="primary" id="rsend">Отправить мой ключ</button>
             <button id="oaddgo">Создать пару</button>
@@ -2286,7 +2342,7 @@
       const preview = parseKeyPreview(shadow.getElementById("okey").value || foundKey || "");
       const key = preview && preview.token;
       if (!key) {
-        paint("ключ в поле битый или обрезан — скопируйте S256K1./S256KT1. целиком", false);
+        paint("ключ в поле битый или обрезан — скопируйте S256K1./S256KT1./S256KB1. целиком", false);
         return;
       }
       const act = pairTermsAction(preview);
@@ -2505,13 +2561,7 @@
   async function sendMyKey() {
     const peer = detectPeer();
     if (!peer) return;
-    const ttl = rekeyTtl >>> 0;
-    const mode = await send({
-      type: "S256_SET_PAIR_MODE",
-      mode: ttl > 0 ? "safe" : "forever",
-      ttlSec: ttl,
-    });
-    if (mode && mode.ok) lastStatus.keyTtlSec = ttl;
+    if (!(await applyOfferTerms())) return;
     const res = await send({ type: "S256_MY_KEY" });
     if (!res || !res.ok || !res.key) {
       paint("не удалось взять ключ — разблокируйте Pairlock", false);
@@ -2646,10 +2696,11 @@
           ? " · ключи " + ttlPhrase(st.bound.ttlSec) + ", скоро истекут"
           : " · ключи " + ttlPhrase(st.bound.ttlSec) + " до " + new Date(st.bound.expiresAt).toLocaleString("ru-RU", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" }))
         : "";
+      const burnBit = st.bound.burnTtlSec ? " · сгорает через " + ttlPhrase(st.bound.burnTtlSec) + " после прочтения" : "";
       const tail = st.pageDecrypt
         ? (st.bound.verified ? "🔒 шифруется" : "🔒 шифруется · отпечаток не сверен")
         : "🔒 шифруется · текст в «Чате», на странице каша";
-      paint(st.bound.name + " · " + tail + ttlBit, true, "unbind");
+      paint(st.bound.name + " · " + tail + ttlBit + burnBit, true, "unbind");
       return;
     }
     if (!peer) {
@@ -2801,6 +2852,12 @@
     if (decryptCache.has(token)) return decryptCache.get(token);
     const res = await send({ type: "S256_DECRYPT", text: token });
     if (!res || !res.ok || res.skipped || typeof res.text !== "string") return null;
+    if (res.burned) {
+      const dead = "🔒 ● сгорело";
+      decryptCache.set(token, dead);
+      return dead;
+    }
+    if (res.burnAt) return null;
     let out = res.text;
     /* Every decrypted bubble gets a visible marker so the user can tell it was encrypted. */
     if (!res.outgoing && !res.known) out = "⚠︎ [неизвестный ключ] " + out;
@@ -2844,7 +2901,7 @@
     for (const n of nodes) {
       const s = n.nodeValue;
       const tokens = extractCipherTokens(s);
-      if (n.nodeValue.indexOf("S256K1.") !== -1 || n.nodeValue.indexOf("S256KT1.") !== -1) {
+      if (n.nodeValue.indexOf("S256K1.") !== -1 || n.nodeValue.indexOf("S256KT1.") !== -1 || n.nodeValue.indexOf("S256KB1.") !== -1) {
         /* keys harvested elsewhere */
       }
       for (const tok of tokens) harvested.push(tok);
@@ -2883,7 +2940,7 @@
       for (const m of muts) {
         if (m.type === "characterData" && m.target && m.target.nodeType === 3) {
           const v = m.target.nodeValue || "";
-          if (v.indexOf("S256K1.") !== -1 || v.indexOf("S256KT1.") !== -1) fresh.push(m.target);
+          if (v.indexOf("S256K1.") !== -1 || v.indexOf("S256KT1.") !== -1 || v.indexOf("S256KB1.") !== -1) fresh.push(m.target);
         }
         for (const n of m.addedNodes || []) collectKeyTextNodes(n, fresh);
       }

@@ -121,6 +121,36 @@ async function main() {
     assert((await P.decrypt(many[i], bob, alice.publicRaw)) === "msg-" + i, "ooo " + i);
   }
 
+  const kb = P.encodeBurnKey(alice.publicRaw, sessA.publicRaw, 30, 0, 1757678901);
+  assert(P.isBurnKey(kb) && P.isPublicKey(kb), "kb1 prefix");
+  const parsedBurn = P.parsePeerKey(kb);
+  assert(parsedBurn.burn && parsedBurn.burnTtlSec === 30 && parsedBurn.ttlSec === 0, "parse kb1");
+  const kbGlued = P.parsePeerKey(kb + "13:45");
+  assert(kbGlued.burnTtlSec === 30 && kbGlued.issuedAt === 1757678901, "kb1 trailing stripped");
+
+  const root = await C.x25519Dh(sessA.privateRaw, sessB.publicRaw);
+  const chA = await P.deriveBurnChains(root, alice.publicRaw, bob.publicRaw);
+  const chB = await P.deriveBurnChains(root, bob.publicRaw, alice.publicRaw);
+  assert(C.timingSafeEqual(chA.ckSend, chB.ckRecv), "alice send == bob recv");
+  assert(C.timingSafeEqual(chA.ckRecv, chB.ckSend), "alice recv == bob send");
+  const stepA = await P.ratchetStep(chA.ckSend, 0);
+  const stepB = await P.ratchetStep(chB.ckRecv, 0);
+  assert(C.timingSafeEqual(stepA.msgKey, stepB.msgKey), "ratchet msg keys match");
+  const burnPkt = await P.encrypt("сгорит", alice, bob.publicRaw, null, {
+    stealth: true,
+    burn: { msgKey: stepA.msgKey, counter: 0, issuedAt: Math.floor(Date.now() / 1000), burnTtl: 60 },
+  });
+  assert(P.isCiphertext(burnPkt), "burn packet recognized");
+  assert(P.unpack(burnPkt).burn && P.unpack(burnPkt).burnTtl === 60, "burn unpack");
+  assert((await P.decrypt(burnPkt, bob, alice.publicRaw, null, { msgKey: stepB.msgKey })) === "сгорит", "burn roundtrip");
+  let noRatchet = false;
+  try {
+    await P.decrypt(burnPkt, bob, alice.publicRaw);
+  } catch {
+    noRatchet = true;
+  }
+  assert(noRatchet, "identity-only cannot open burn packet");
+
   console.log("OK");
   console.log("sample", packet.slice(0, 40) + "…");
 }

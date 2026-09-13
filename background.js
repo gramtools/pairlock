@@ -67,7 +67,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         unlocked,
         bound: bound
           ? Object.assign(
-              { id: bound.id, name: bound.name, fingerprint: bound.fingerprint, verified: !!bound.verified },
+              {
+                id: bound.id,
+                name: bound.name,
+                fingerprint: bound.fingerprint,
+                verified: !!bound.verified,
+              },
               S256Vault.sessionView(bound)
             )
           : null,
@@ -75,6 +80,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         hasVault: await S256Vault.hasVault(),
         bindNext: await getBindNext(),
         keyTtlSec: unlocked ? (S256Vault.getState().settings.keyTtlSec || 0) : 0,
+        keyBurnTtlSec: unlocked ? (S256Vault.getState().settings.keyBurnTtlSec || 0) : 0,
         burnVaultSec: unlocked ? (S256Vault.getState().settings.burnVaultSec || 0) : 0,
         burnAt: unlocked ? (S256Vault.getState().settings.burnAt || 0) : 0,
         pairMode: unlocked ? S256Vault.pairModeView().mode : "forever",
@@ -89,6 +95,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await ready();
       const s = await S256Vault.ensureSafePair();
       return { ok: true, ...s, pairMode: "safe" };
+    }
+
+    if (msg.type === "S256_SET_BURN_TTL") {
+      await ready();
+      await S256Vault.setSetting("keyBurnTtlSec", msg.ttlSec != null ? msg.ttlSec : 0);
+      return { ok: true, keyBurnTtlSec: S256Vault.getSettings().keyBurnTtlSec || 0 };
     }
 
     if (msg.type === "S256_SET_PAIR_MODE") {
@@ -253,6 +265,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         verified: res.outgoing ? true : !!res.verified,
         name: res.contact ? res.contact.name : null,
         contactId: res.contact ? res.contact.id : null,
+        burned: !!res.burned,
+        burnAt: res.burnAt || 0,
+        burnTtlSec: res.burnTtlSec || 0,
       };
     }
 

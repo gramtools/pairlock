@@ -250,6 +250,38 @@ async function main() {
     badRotate = true;
   }
   assert(badRotate, "rotate needs password");
+
+  await V.setSetting("keyBurnTtlSec", 30);
+  const kbAlice = await V.publicKeyText();
+  assert(kbAlice.startsWith("S256KB1."), "burn offer key");
+  const eve = await globalThis.S256Crypto.generateIdentity();
+  const eveSess = await globalThis.S256Crypto.generateX25519();
+  const eveTok = P.encodeBurnKey(eve.publicRaw, eveSess.publicRaw, 30, 0, Math.floor(Date.now() / 1000));
+  const burnC = await V.addContact("Ева", eveTok);
+  assert(burnC.burnTtlSec === 30 && burnC.ckSend && burnC.ckRecv, "burn pair attached");
+  const burnOut = await V.encryptForContact(burnC.id, "огонь");
+  assert(P.unpack(burnOut[0]).burn, "outgoing burn packet");
+  const burnBack = await V.decryptPacket(burnOut[0]);
+  assert(burnBack.text === "огонь" && burnBack.outgoing, "sender cache while live");
+  const pending = V.getSettings().pendingSession;
+  const alicePub = globalThis.S256Crypto.b64urlToBytes(kbAlice.split(".")[1]);
+  const root = await globalThis.S256Crypto.x25519Dh(eveSess.privateRaw, globalThis.S256Crypto.b64urlToBytes(pending.pubB64));
+  const eveChains = await P.deriveBurnChains(root, eve.publicRaw, alicePub);
+  const eveStep = await P.ratchetStep(eveChains.ckSend, 0);
+  const evePkt = await P.encrypt("тайна", eve, alicePub, null, {
+    burn: { msgKey: eveStep.msgKey, counter: 0, issuedAt: Math.floor(Date.now() / 1000), burnTtl: 30 },
+  });
+  const eveGot = await V.decryptPacket(evePkt);
+  assert(eveGot.text === "тайна" && eveGot.burnAt > Date.now(), "inbound burn opens once");
+  const eveGot2 = await V.decryptPacket(evePkt);
+  assert(eveGot2.text === "тайна", "second read uses open cache");
+  eveGot.burnAt = Date.now() - 1;
+  eveGot2.burnAt = Date.now() - 1;
+  await V.expireBurns();
+  const dead = await V.decryptPacket(evePkt);
+  assert(dead.burned && /сгорело/.test(dead.text), "after window pairlock cannot open");
+  await V.setSetting("keyBurnTtlSec", 0);
+
   await V.rotateIdentity("legacy-pass-123");
   const neu = await V.publicKeyText();
   assert(neu !== oldPub, "identity replaced");
